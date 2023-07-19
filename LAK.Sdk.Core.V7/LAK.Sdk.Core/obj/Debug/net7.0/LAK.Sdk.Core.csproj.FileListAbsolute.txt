@@ -1,0 +1,12 @@
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/bin/Debug/net7.0/LAK.Sdk.Core.deps.json
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/bin/Debug/net7.0/LAK.Sdk.Core.dll
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/bin/Debug/net7.0/LAK.Sdk.Core.pdb
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.csproj.AssemblyReference.cache
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.GeneratedMSBuildEditorConfig.editorconfig
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.AssemblyInfoInputs.cache
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.AssemblyInfo.cs
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.csproj.CoreCompileInputs.cache
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.dll
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/refint/LAK.Sdk.Core.dll
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/LAK.Sdk.Core.pdb
+/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/obj/Debug/net7.0/ref/LAK.Sdk.Core.dll
