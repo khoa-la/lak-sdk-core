@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using LAK.Sdk.Core.Models;
 
 namespace LAK.Sdk.Core.Utilities;
 
@@ -9,47 +10,56 @@ public static class LinQUtils
         this IQueryable<TEntity> source,
         TEntity entity)
     {
-        foreach (PropertyInfo propertyInfo in entity.GetType().GetProperties())
+        var entityType = entity.GetType();
+        var properties = entityType.GetProperties();
+
+        foreach (var propertyInfo in properties)
         {
-            if (entity.GetType().GetProperty(propertyInfo.Name) != (PropertyInfo)null)
+            var propValue = propertyInfo.GetValue(entity);
+            if (propValue == null) continue;
+
+            var propType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
+            var dataType = propType.Name;
+
+            switch (dataType)
             {
-                var obj = entity.GetType().GetProperty(propertyInfo.Name)?.GetValue(entity);
-                if (obj == null) continue;
-                var propType = propertyInfo.PropertyType.Name == "Nullable`1"
-                    ? Nullable.GetUnderlyingType(propertyInfo.PropertyType)
-                    : propertyInfo.PropertyType;
-                var dataType = propType?.ToString().Split('.').Last();
-                switch (dataType)
-                {
-                    case "String":
+                case "String":
+                    source = source.WhereDynamic(propertyInfo.Name, "LIKE", propValue.ToString());
+                    break;
+                case "Guid":
+                case "Boolean":
+                case "Int32":
+                case "Double":
+                case "Decimal":
+                    source = source.WhereDynamic(propertyInfo.Name, "==", propValue.ToString());
+                    break;
+                case "DateTime":
+                    if (propValue is DateTimeRange dateTimeRange)
                     {
-                        var propExpression =
-                            ToExpression<TEntity>(null, propertyInfo.Name, "LIKE", obj.ToString(), null);
-                        source = source.Where(propExpression);
-                        break;
+                        var startDate = dateTimeRange.From;
+                        var endDate = dateTimeRange.To;
+                        var param = dateTimeRange.Param;
+
+                        if (startDate != null && endDate != null)
+                        {
+                            // Use "BETWEEN" for the DateTime range
+                            source = source.WhereDynamic(param, ">=", startDate.ToString());
+                            source = source.WhereDynamic(param, "<=", endDate.ToString());
+                        }
+                        else if (startDate != null)
+                        {
+                            source = source.WhereDynamic(param, ">=", startDate.ToString());
+                        }
+                        else if (endDate != null)
+                        {
+                            source = source.WhereDynamic(param, "<=", endDate.ToString());
+                        }
                     }
-                    case "Guid" or "Boolean":
+                    else
                     {
-                        var propExpression =
-                            ToExpression<TEntity>(null, propertyInfo.Name, "==", obj.ToString(), null);
-                        source = source.Where(propExpression);
-                        break;
+                        source = source.WhereDynamic(propertyInfo.Name, ">=", propValue.ToString());
                     }
-                    case "Int32" or "Double" or "Decimal":
-                    {
-                        var propExpression =
-                            ToExpression<TEntity>(null, propertyInfo.Name, "==", obj.ToString(), null);
-                        source = source.Where(propExpression);
-                        break;
-                    }
-                    case "DateTime":
-                    {
-                        var propExpression =
-                            ToExpression<TEntity>(null, propertyInfo.Name, ">=", obj.ToString(), null);
-                        source = source.Where(propExpression);
-                        break;
-                    }
-                }
+                    break;
             }
         }
 
@@ -98,41 +108,45 @@ public static class LinQUtils
         this IQueryable<TResult> source,
         int page,
         int size,
-        int limitPaging = 50,
-        int defaultPaging = 1)
+        int limitPaging = 50)
     {
-        if (size > limitPaging)
-            size = limitPaging;
-        if (size < 1)
-            size = defaultPaging;
-        if (page < 1)
-            page = 1;
-        return (source.Count<TResult>(), source.Skip<TResult>((page - 1) * size).Take<TResult>(size));
+        size = Math.Min(size, limitPaging);
+        size = Math.Max(size, 1);
+        page = Math.Max(page, 1);
+        var totalCount = source.Count();
+        var pagedData = source.Skip((page - 1) * size).Take(size);
+        return (totalCount, pagedData);
     }
 
     private static Expression<Func<TEntity, object>> GetPropertyGetter<TEntity>(string property)
     {
-        if (property == null)
-            throw new ArgumentNullException(nameof(property));
-
         var param = Expression.Parameter(typeof(TEntity));
-        var isExistProperty = false;
-        foreach (PropertyInfo propertyInfo in param.Type.GetProperties())
+        var propertyInfo = typeof(TEntity).GetProperty(property, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+        if (propertyInfo == null)
         {
-            if (Equals(propertyInfo.Name.ToLower(), property.ToLower()))
-            {
-                isExistProperty = true;
-            }
+            throw new ArgumentException($"Property '{property}' does not exist on type '{typeof(TEntity).Name}'.");
         }
 
-        if (!isExistProperty)
-        {
-            throw new Exception($"{property} property does not exist!");
-        }
-
-        var prop = Expression.Property(param, property);
+        var prop = Expression.Property(param, propertyInfo);
         var convertedProp = Expression.Convert(prop, typeof(object));
         return Expression.Lambda<Func<TEntity, object>>(convertedProp, param);
+    }
+    
+    private static IQueryable<TEntity> WhereDynamic<TEntity>(
+        this IQueryable<TEntity> source,
+        string propertyName,
+        string @operator,
+        string value)
+    {
+        var param = Expression.Parameter(typeof(TEntity));
+        var property = NestedExprProp(param, propertyName);
+        var propType = property.Type.Name == "Nullable`1"
+            ? Nullable.GetUnderlyingType(property.Type)
+            : property.Type;
+        var constant = ToExprConstant(propType, value);
+        var expression = ApplyFilter(@operator, property, Expression.Convert(constant, property.Type));
+        var lambda = Expression.Lambda<Func<TEntity, bool>>(expression, param);
+        return source.Where(lambda);
     }
 
     private static Expression<Func<T, bool>> ToExpression<T>(string andOrOperator, string propName, string opr,
