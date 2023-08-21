@@ -8,7 +8,7 @@ public static class LinQUtils
 {
     public static IQueryable<TEntity> DynamicFilter<TEntity>(
         this IQueryable<TEntity> source,
-        TEntity entity)
+        object entity)
     {
         var entityType = entity.GetType();
         var properties = entityType.GetProperties();
