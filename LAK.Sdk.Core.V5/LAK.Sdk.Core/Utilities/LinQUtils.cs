@@ -3,74 +3,137 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using LAK.Sdk.Core.Models;
 
 namespace LAK.Sdk.Core.Utilities
 {
     public static class LinQUtils
     {
-        public static IQueryable<TEntity> DynamicFilter<TEntity>(
-            this IQueryable<TEntity> source,
-            TEntity entity)
+        public static IQueryable<T> DynamicFilter<T>(
+            this IQueryable<T> source,
+            T filterObject)
         {
-            var entityType = entity.GetType();
-        var properties = entityType.GetProperties();
+            Type? entityType = filterObject.GetType();
+            PropertyInfo[]? properties = entityType.GetProperties();
+            Type? sourceType = source.ElementType;
+            PropertyInfo[]? sourceProperties = sourceType.GetProperties();
 
-        foreach (var propertyInfo in properties)
-        {
-            var propValue = propertyInfo.GetValue(entity);
-            if (propValue == null) continue;
-
-            var propType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
-            var dataType = propType.Name;
-
-            switch (dataType)
+            foreach (var propertyInfo in properties)
             {
-                case "String":
-                    source = source.WhereDynamic(propertyInfo.Name, "LIKE", propValue.ToString());
-                    break;
-                case "Guid":
-                case "Boolean":
-                case "Int32":
-                case "Double":
-                case "Decimal":
-                    source = source.WhereDynamic(propertyInfo.Name, "==", propValue.ToString());
-                    break;
-                case "DateTime":
-                    if (propValue is DateTimeRange dateTimeRange)
-                    {
-                        var startDate = dateTimeRange.From;
-                        var endDate = dateTimeRange.To;
-                        var param = dateTimeRange.Param;
+                var propValue = propertyInfo.GetValue(filterObject);
+                if (propValue != null)
+                {
+                    var propType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
+                    var dataType = propType.Name;
 
-                        if (startDate != null && endDate != null)
-                        {
-                            // Use "BETWEEN" for the DateTime range
-                            source = source.WhereDynamic(param, ">=", startDate.ToString());
-                            source = source.WhereDynamic(param, "<=", endDate.ToString());
-                        }
-                        else if (startDate != null)
-                        {
-                            source = source.WhereDynamic(param, ">=", startDate.ToString());
-                        }
-                        else if (endDate != null)
-                        {
-                            source = source.WhereDynamic(param, "<=", endDate.ToString());
-                        }
-                    }
-                    else
+                    var sourceProperty =
+                        sourceProperties.FirstOrDefault(p => p.Name.ToLower() == propertyInfo.Name.ToLower().Trim());
+
+                    switch (dataType.ToLower())
                     {
-                        source = source.WhereDynamic(propertyInfo.Name, ">=", propValue.ToString());
+                        case DataTypes.STRING:
+                            if (sourceProperty == null) break;
+                            source = source.WhereDynamic(propertyInfo.Name, "LIKE", propValue.ToString());
+                            break;
+                        case DataTypes.GUID:
+                        case DataTypes.BOOLEAN:
+                        case DataTypes.INT:
+                        case DataTypes.DOUBLE:
+                        case DataTypes.DECIMAL:
+                            if (sourceProperty == null) break;
+                            source = source.WhereDynamic(propertyInfo.Name, "==", propValue.ToString());
+                            break;
+                        case DataTypes.DATETIME:
+                            if (propValue is DateTime dateTimeValue)
+                            {
+                                // Assuming you have a property named "DateType" to specify the filter type (e.g., "Equal", "GreaterThan", "LessThanOrEqual", "Range")
+                                var dateFilterType =
+                                    entityType.GetProperty("DateType")?.GetValue(filterObject) as string;
+
+                                switch (dateFilterType)
+                                {
+                                    case DateTypes.EQUAL:
+                                        if (sourceProperty == null) break;
+                                        source = source.WhereDynamic(propertyInfo.Name, "==",
+                                            dateTimeValue.Date.ToString());
+                                        break;
+                                    case DateTypes.GREATERTHAN:
+                                        if (sourceProperty == null) break;
+                                        source = source.WhereDynamic(propertyInfo.Name, ">",
+                                            new DateTime(dateTimeValue.Year, dateTimeValue.Month, dateTimeValue.Day, 23,
+                                                59, 59).ToString());
+                                        break;
+                                    case DateTypes.GREATERTHANOREQUAL:
+                                        if (sourceProperty == null) break;
+                                        source = source.WhereDynamic(propertyInfo.Name, ">=",
+                                            dateTimeValue.Date.ToString());
+                                        break;
+                                    case DateTypes.LESSTHAN:
+                                        if (sourceProperty == null) break;
+                                        source = source.WhereDynamic(propertyInfo.Name, "<",
+                                            dateTimeValue.Date.ToString());
+                                        break;
+                                    case DateTypes.LESSTHANOREQUAL:
+                                        if (sourceProperty == null) break;
+                                        source = source.WhereDynamic(propertyInfo.Name, "<=",
+                                            new DateTime(dateTimeValue.Year, dateTimeValue.Month, dateTimeValue.Day, 23,
+                                                59, 59).ToString());
+                                        break;
+                                    case DateTypes.RANGE:
+                                        // Assuming you have properties named "From" and "To", "DateParam" to specify the date range
+                                        DateTime? startDate =
+                                            entityType.GetProperty("From")?.GetValue(filterObject) as DateTime?;
+                                        DateTime? endDate =
+                                            entityType.GetProperty("To")?.GetValue(filterObject) as DateTime?;
+                                        string? param =
+                                            entityType.GetProperty("DateParam")?.GetValue(filterObject) as string;
+                                        bool isExistingParam = sourceProperties
+                                            .Where(p => param == null || p.Name.ToLower() == param.ToLower().Trim()
+                                                && (p.PropertyType == typeof(DateTime)
+                                                    || p.PropertyType.IsGenericType
+                                                    && p.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>)
+                                                    && p.PropertyType.GetGenericArguments()[0] == typeof(DateTime)))
+                                            .Any();
+
+                                        if (!isExistingParam) break;
+
+                                        if (startDate.HasValue)
+                                            source = source.WhereDynamic(param, ">=", startDate.ToString());
+                                        if (endDate.HasValue)
+                                        {
+                                            endDate = new DateTime(endDate.Value.Year, endDate.Value.Month,
+                                                endDate.Value.Day, 23, 59, 59);
+                                            source = source.WhereDynamic(param, "<=", endDate.ToString());
+                                        }
+
+                                        break;
+                                    default:
+                                        if (sourceProperty == null) break;
+                                        source = source.WhereDynamic(propertyInfo.Name, ">=", dateTimeValue.ToString());
+                                        source = source.WhereDynamic(propertyInfo.Name, "<=",
+                                            new DateTime(dateTimeValue.Year, dateTimeValue.Month, dateTimeValue.Day, 23,
+                                                59, 59).ToString());
+                                        break;
+                                }
+                            }
+
+                            break;
+                        default:
+                            if (propType.IsEnum)
+                            {
+                                int enumValue = (int)propValue;
+                                source = source.WhereDynamic(propertyInfo.Name, "==", enumValue.ToString());
+                            }
+
+                            break;
                     }
-                    break;
+                }
             }
+
+            return source;
         }
 
-        return source;
-        }
-
-        public static IQueryable<TEntity> DynamicSort<TEntity>(
-            this IQueryable<TEntity> source, string sort, string order, string defaultOrder = "ascending")
+        public static IQueryable<T> DynamicSort<T>(
+            this IQueryable<T> source, string sort, string order, string defaultOrder = "ascending")
         {
             List<string> listOrder = new List<string>
             {
@@ -90,7 +153,7 @@ namespace LAK.Sdk.Core.Utilities
 
             if (!String.IsNullOrEmpty(sort))
             {
-                var propertyGetter = LinQUtils.GetPropertyGetter<TEntity>(sort);
+                var propertyGetter = LinQUtils.GetPropertyGetter<T>(sort);
                 if (!String.IsNullOrEmpty(order))
                 {
                     if (order.ToLower() == "asc" || order.ToLower() == "ascending")
@@ -123,34 +186,35 @@ namespace LAK.Sdk.Core.Utilities
             return (source.Count<TResult>(), source.Skip<TResult>((page - 1) * size).Take<TResult>(size));
         }
 
-        private static Expression<Func<TEntity, object>> GetPropertyGetter<TEntity>(string property)
+        private static Expression<Func<T, object>> GetPropertyGetter<T>(string property)
         {
-            var param = Expression.Parameter(typeof(TEntity));
-            var propertyInfo = typeof(TEntity).GetProperty(property, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+            var param = Expression.Parameter(typeof(T));
+            var propertyInfo = typeof(T).GetProperty(property,
+                BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
             if (propertyInfo == null)
             {
-                throw new ArgumentException($"Property '{property}' does not exist on type '{typeof(TEntity).Name}'.");
+                throw new ArgumentException($"Property '{property}' does not exist on type '{typeof(T).Name}'.");
             }
 
             var prop = Expression.Property(param, propertyInfo);
             var convertedProp = Expression.Convert(prop, typeof(object));
-            return Expression.Lambda<Func<TEntity, object>>(convertedProp, param);
+            return Expression.Lambda<Func<T, object>>(convertedProp, param);
         }
-    
-        private static IQueryable<TEntity> WhereDynamic<TEntity>(
-            this IQueryable<TEntity> source,
+
+        private static IQueryable<T> WhereDynamic<T>(
+            this IQueryable<T> source,
             string propertyName,
             string @operator,
             string value)
         {
-            var param = Expression.Parameter(typeof(TEntity));
+            var param = Expression.Parameter(typeof(T));
             var property = NestedExprProp(param, propertyName);
             var propType = property.Type.Name == "Nullable`1"
                 ? Nullable.GetUnderlyingType(property.Type)
                 : property.Type;
             var constant = ToExprConstant(propType, value);
             var expression = ApplyFilter(@operator, property, Expression.Convert(constant, property.Type));
-            var lambda = Expression.Lambda<Func<TEntity, bool>>(expression, param);
+            var lambda = Expression.Lambda<Func<T, bool>>(expression, param);
             return source.Where(lambda);
         }
 

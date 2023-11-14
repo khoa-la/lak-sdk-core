@@ -11,7 +11,7 @@
     "/Users/khoala/.nuget/packages/": {}
   },
   "project": {
-    "version": "7.0.1",
+    "version": "7.0.2",
     "restore": {
       "projectUniqueName": "/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V7/LAK.Sdk.Core/LAK.Sdk.Core.csproj",
       "projectName": "LAK.Sdk.Core",
