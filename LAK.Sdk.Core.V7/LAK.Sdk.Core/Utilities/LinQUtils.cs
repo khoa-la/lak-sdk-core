@@ -7,7 +7,7 @@ namespace LAK.Sdk.Core.Utilities
     {
         public static IQueryable<T> DynamicFilter<T>(
             this IQueryable<T> source,
-            T filterObject)
+            object filterObject)
         {
             Type? entityType = filterObject.GetType();
             PropertyInfo[]? properties = entityType.GetProperties();
@@ -40,7 +40,8 @@ namespace LAK.Sdk.Core.Utilities
                             source = source.WhereDynamic(propertyInfo.Name, "==", propValue.ToString());
                             break;
                         case DataTypes.DATETIME:
-                            if (propValue is DateTime dateTimeValue)
+                            DateTime? dateTimeValue = propValue as DateTime?;
+                            if (dateTimeValue.HasValue)
                             {
                                 // Assuming you have a property named "DateType" to specify the filter type (e.g., "Equal", "GreaterThan", "LessThanOrEqual", "Range")
                                 var dateFilterType =
@@ -51,29 +52,29 @@ namespace LAK.Sdk.Core.Utilities
                                     case DateTypes.EQUAL:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, "==",
-                                            dateTimeValue.Date.ToString());
+                                            dateTimeValue.Value.Date.ToString());
                                         break;
                                     case DateTypes.GREATERTHAN:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, ">",
-                                            new DateTime(dateTimeValue.Year, dateTimeValue.Month, dateTimeValue.Day, 23,
-                                                59, 59).ToString());
+                                            new DateTime(dateTimeValue.Value.Year, dateTimeValue.Value.Month,
+                                                dateTimeValue.Value.Day, 23, 59, 59).ToString());
                                         break;
                                     case DateTypes.GREATERTHANOREQUAL:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, ">=",
-                                            dateTimeValue.Date.ToString());
+                                            dateTimeValue.Value.Date.ToString());
                                         break;
                                     case DateTypes.LESSTHAN:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, "<",
-                                            dateTimeValue.Date.ToString());
+                                            dateTimeValue.Value.Date.ToString());
                                         break;
                                     case DateTypes.LESSTHANOREQUAL:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, "<=",
-                                            new DateTime(dateTimeValue.Year, dateTimeValue.Month, dateTimeValue.Day, 23,
-                                                59, 59).ToString());
+                                            new DateTime(dateTimeValue.Value.Year, dateTimeValue.Value.Month,
+                                                dateTimeValue.Value.Day, 23, 59, 59).ToString());
                                         break;
                                     case DateTypes.RANGE:
                                         // Assuming you have properties named "From" and "To", "DateParam" to specify the date range
@@ -107,8 +108,8 @@ namespace LAK.Sdk.Core.Utilities
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, ">=", dateTimeValue.ToString());
                                         source = source.WhereDynamic(propertyInfo.Name, "<=",
-                                            new DateTime(dateTimeValue.Year, dateTimeValue.Month, dateTimeValue.Day, 23,
-                                                59, 59).ToString());
+                                            new DateTime(dateTimeValue.Value.Year, dateTimeValue.Value.Month,
+                                                dateTimeValue.Value.Day, 23, 59, 59).ToString());
                                         break;
                                 }
                             }
@@ -117,8 +118,11 @@ namespace LAK.Sdk.Core.Utilities
                         default:
                             if (propType.IsEnum)
                             {
+                                var enumType = propValue.GetType();
                                 int enumValue = (int)propValue;
-                                source = source.WhereDynamic(propertyInfo.Name, "==", enumValue.ToString());
+                                source = source.WhereDynamic(propertyInfo.Name, "==",
+                                    Enum.Format(enumType, propValue, "D"),
+                                    "||", ToExpression<T>(null, propertyInfo.Name, "==", propValue.ToString()));
                             }
 
                             break;
@@ -202,7 +206,9 @@ namespace LAK.Sdk.Core.Utilities
             this IQueryable<T> source,
             string propertyName,
             string @operator,
-            string value)
+            string value,
+            string andOrOperator = null,
+            Expression<Func<T, bool>> expr = null)
         {
             var param = Expression.Parameter(typeof(T));
             var property = NestedExprProp(param, propertyName);
@@ -212,6 +218,14 @@ namespace LAK.Sdk.Core.Utilities
             var constant = ToExprConstant(propType, value);
             var expression = ApplyFilter(@operator, property, Expression.Convert(constant, property.Type));
             var lambda = Expression.Lambda<Func<T, bool>>(expression, param);
+            if (expr != null)
+            {
+                lambda = (String.IsNullOrEmpty(andOrOperator) || andOrOperator == "And" ||
+                          andOrOperator == "AND" ||
+                          andOrOperator == "&&")
+                    ? lambda.And(expr)
+                    : lambda.Or(expr);
+            }
             return source.Where(lambda);
         }
 
