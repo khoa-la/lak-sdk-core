@@ -13,10 +13,10 @@ public struct DataTypes
     
 public struct DateTypes
 {
-    public const string EQUAL = "equal";
-    public const string GREATERTHAN = "greaterthan";
-    public const string GREATERTHANOREQUAL = "greaterthanorequal";
-    public const string LESSTHAN = "lessthan";
-    public const string LESSTHANOREQUAL = "lessthanorequal";
-    public const string RANGE = "range";
+    public const string EQUAL = "eq";
+    public const string GREATERTHAN = "gt";
+    public const string GREATERTHANOREQUAL = "gte";
+    public const string LESSTHAN = "lt";
+    public const string LESSTHANOREQUAL = "lte";
+    public const string RANGE = "r";
 }

@@ -16,6 +16,7 @@ namespace LAK.Sdk.Core.Utilities
             PropertyInfo[]? properties = entityType.GetProperties();
             Type? sourceType = source.ElementType;
             PropertyInfo[]? sourceProperties = sourceType.GetProperties();
+            string[] compareOperators = new string[] { "" };
 
             foreach (var propertyInfo in properties)
             {
@@ -44,40 +45,48 @@ namespace LAK.Sdk.Core.Utilities
                             break;
                         case DataTypes.DATETIME:
                             DateTime? dateTimeValue = propValue as DateTime?;
+                            DateTime? dateTimeGTLTE = dateTimeValue.Value.TimeOfDay != TimeSpan.Zero
+                                ? dateTimeValue.Value.AddMinutes(1)
+                                : new DateTime(dateTimeValue.Value.Year, dateTimeValue.Value.Month,
+                                    dateTimeValue.Value.Day, 23, 59, 59);
+
                             if (dateTimeValue.HasValue)
                             {
                                 // Assuming you have a property named "DateType" to specify the filter type (e.g., "Equal", "GreaterThan", "LessThanOrEqual", "Range")
-                                var dateFilterType =
-                                    entityType.GetProperty("DateType")?.GetValue(filterObject) as string;
+                                var dateOperators =
+                                    entityType.GetProperty("DateOperators")?.GetValue(filterObject) as string;
 
-                                switch (dateFilterType)
+                                compareOperators = compareOperators[0] == "" && dateOperators != null
+                                    ? dateOperators!.Split(',')
+                                    : compareOperators;
+
+                                switch (compareOperators[0].ToLower().Trim())
                                 {
                                     case DateTypes.EQUAL:
                                         if (sourceProperty == null) break;
-                                        source = source.WhereDynamic(propertyInfo.Name, "==",
-                                            dateTimeValue.Value.Date.ToString());
+                                        source = source.WhereDynamic(propertyInfo.Name, ">=",
+                                            dateTimeValue.Value.ToString(),
+                                            "&&",
+                                            ToExpression<T>(null, propertyInfo.Name, "<=",
+                                                dateTimeValue.Value.AddMinutes(1).ToString()));
                                         break;
                                     case DateTypes.GREATERTHAN:
                                         if (sourceProperty == null) break;
-                                        source = source.WhereDynamic(propertyInfo.Name, ">",
-                                            new DateTime(dateTimeValue.Value.Year, dateTimeValue.Value.Month,
-                                                dateTimeValue.Value.Day, 23, 59, 59).ToString());
+                                        source = source.WhereDynamic(propertyInfo.Name, ">", dateTimeGTLTE.ToString());
                                         break;
                                     case DateTypes.GREATERTHANOREQUAL:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, ">=",
-                                            dateTimeValue.Value.Date.ToString());
+                                            dateTimeValue.Value.ToString());
                                         break;
                                     case DateTypes.LESSTHAN:
                                         if (sourceProperty == null) break;
                                         source = source.WhereDynamic(propertyInfo.Name, "<",
-                                            dateTimeValue.Value.Date.ToString());
+                                            dateTimeValue.Value.ToString());
                                         break;
                                     case DateTypes.LESSTHANOREQUAL:
                                         if (sourceProperty == null) break;
-                                        source = source.WhereDynamic(propertyInfo.Name, "<=",
-                                            new DateTime(dateTimeValue.Value.Year, dateTimeValue.Value.Month,
-                                                dateTimeValue.Value.Day, 23, 59, 59).ToString());
+                                        source = source.WhereDynamic(propertyInfo.Name, "<=", dateTimeGTLTE.ToString());
                                         break;
                                     case DateTypes.RANGE:
                                         // Assuming you have properties named "From" and "To", "DateParam" to specify the date range
@@ -86,7 +95,8 @@ namespace LAK.Sdk.Core.Utilities
                                         DateTime? endDate =
                                             entityType.GetProperty("To")?.GetValue(filterObject) as DateTime?;
                                         string? param =
-                                            entityType.GetProperty("DateParam")?.GetValue(filterObject) as string;
+                                            entityType.GetProperty("DateRangeParam")?.GetValue(filterObject) as string;
+
                                         bool isExistingParam = sourceProperties
                                             .Where(p => param == null || p.Name.ToLower() == param.ToLower().Trim()
                                                 && (p.PropertyType == typeof(DateTime)
@@ -117,8 +127,53 @@ namespace LAK.Sdk.Core.Utilities
                                 }
                             }
 
+                            if (compareOperators.Length > 1)
+                            {
+                                Array.Copy(compareOperators, 1, compareOperators, 0, compareOperators.Length - 1);
+                                Array.Resize(ref compareOperators, compareOperators.Length - 1);
+                            }
+
                             break;
                         default:
+                            string[]? dateRangeValues =
+                                entityType.GetProperty("DateRangeFilters")?.GetValue(filterObject) as string[];
+                            if (dateRangeValues != null)
+                            {
+                                foreach (var dateRange in dateRangeValues)
+                                {
+                                    var parts = dateRange.Split(',');
+                                    if (parts.Length == 3)
+                                    {
+                                        var propertyName = parts[0];
+                                        if (DateTime.TryParse(parts[1], out var startDate) &&
+                                            DateTime.TryParse(parts[2], out var endDate))
+                                        {
+                                            bool isExistingParams = sourceProperties
+                                                .Where(p => propertyName == null ||
+                                                            p.Name.ToLower() == propertyName.ToLower().Trim()
+                                                            && (p.PropertyType == typeof(DateTime)
+                                                                || p.PropertyType.IsGenericType
+                                                                && p.PropertyType.GetGenericTypeDefinition() ==
+                                                                typeof(Nullable<>)
+                                                                && p.PropertyType.GetGenericArguments()[0] ==
+                                                                typeof(DateTime)))
+                                                .Any();
+                                            if (isExistingParams)
+                                            {
+                                                endDate = endDate.TimeOfDay != TimeSpan.Zero
+                                                    ? endDate.AddMinutes(1)
+                                                    : new DateTime(endDate.Year, endDate.Month,
+                                                        endDate.Day, 23, 59, 59);
+                                                // Apply date range filter
+                                                source = source.WhereDynamic(propertyName, ">=", startDate.ToString(),
+                                                    "&&",
+                                                    ToExpression<T>(null, propertyName, "<=", endDate.ToString()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             if (propType.IsEnum)
                             {
                                 var enumType = propValue.GetType();
@@ -157,7 +212,7 @@ namespace LAK.Sdk.Core.Utilities
 
             if (!String.IsNullOrEmpty(sort))
             {
-                var propertyGetter = LinQUtils.GetPropertyGetter<T>(sort);
+                var propertyGetter = GetPropertyGetter<T>(sort);
                 if (!String.IsNullOrEmpty(order))
                 {
                     if (order.ToLower() == "asc" || order.ToLower() == "ascending")
