@@ -32,6 +32,42 @@ namespace LAK.Sdk.Core.Utilities
                     switch (dataType.ToLower())
                     {
                         case DataTypes.STRING:
+                            string dateRanges = entityType.GetProperty("DateRangeFilters")?.GetValue(filterObject) as string;
+
+                            if (!string.IsNullOrEmpty(dateRanges))
+                            {
+                                var rangeArray = dateRanges.Split(';');
+                                foreach (var dateRange in rangeArray)
+                                {
+                                    var parts = dateRange.Split(',');
+                                    if (parts.Length == 3)
+                                    {
+                                        var propertyName = parts[0];
+                                        if (DateTime.TryParse(parts[1], out var startDate) && DateTime.TryParse(parts[2], out var endDate))
+                                        {
+                                            bool isExistingParams = sourceProperties
+                                                .Where(p => propertyName == null || p.Name.ToLower() == propertyName.ToLower().Trim()
+                                                    && (p.PropertyType == typeof(DateTime)
+                                                        || p.PropertyType.IsGenericType
+                                                        && p.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>)
+                                                        && p.PropertyType.GetGenericArguments()[0] == typeof(DateTime)))
+                                                .Any();
+
+                                            if (isExistingParams)
+                                            {
+                                                endDate = endDate.TimeOfDay != TimeSpan.Zero
+                                                    ? endDate.AddMinutes(1)
+                                                    : new DateTime(endDate.Year, endDate.Month,
+                                                        endDate.Day, 23, 59, 59);
+                                                // Apply date range filter
+                                                source = source.WhereDynamic(propertyName, ">=", startDate.ToString(),
+                                                    "&&", ToExpression<T>(null, propertyName, "<=", endDate.ToString()));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
                             if (sourceProperty == null) break;
                             source = source.WhereDynamic(propertyInfo.Name, "LIKE", propValue.ToString());
                             break;

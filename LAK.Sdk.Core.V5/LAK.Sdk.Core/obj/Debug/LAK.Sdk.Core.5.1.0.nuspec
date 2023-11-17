@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>LAK.Sdk.Core</id>
+    <version>5.1.0</version>
+    <authors>LAK.Sdk.Core</authors>
+    <description>Package Description</description>
+    <dependencies>
+      <group targetFramework="net5.0" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="/Users/khoala/Documents/BE/lak-sdk-core/LAK.Sdk.Core.V5/LAK.Sdk.Core/bin/Debug/net5.0/LAK.Sdk.Core.dll" target="lib/net5.0/LAK.Sdk.Core.dll" />
+  </files>
+</package>

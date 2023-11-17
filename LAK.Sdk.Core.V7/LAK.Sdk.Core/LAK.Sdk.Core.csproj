@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <Version>7.0.7</Version>
+        <Version>7.1.0</Version>
     </PropertyGroup>
 
 </Project>

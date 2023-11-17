@@ -6,7 +6,7 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v5.0": {
-      "LAK.Sdk.Core/5.0.6": {
+      "LAK.Sdk.Core/5.1.0": {
         "runtime": {
           "LAK.Sdk.Core.dll": {}
         }
@@ -14,7 +14,7 @@
     }
   },
   "libraries": {
-    "LAK.Sdk.Core/5.0.6": {
+    "LAK.Sdk.Core/5.1.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
