@@ -29,7 +29,8 @@ namespace LAK.Sdk.Core.Utilities
                     switch (dataType.ToLower())
                     {
                         case DataTypes.STRING:
-                            string dateRanges = entityType.GetProperty("DateRangeFilters")?.GetValue(filterObject) as string;
+                            string dateRanges =
+                                entityType.GetProperty("DateRangeFilters")?.GetValue(filterObject) as string;
 
                             if (!string.IsNullOrEmpty(dateRanges))
                             {
@@ -40,14 +41,18 @@ namespace LAK.Sdk.Core.Utilities
                                     if (parts.Length == 3)
                                     {
                                         var propertyName = parts[0];
-                                        if (DateTime.TryParse(parts[1], out var startDate) && DateTime.TryParse(parts[2], out var endDate))
+                                        if (DateTime.TryParse(parts[1], out var startDate) &&
+                                            DateTime.TryParse(parts[2], out var endDate))
                                         {
                                             bool isExistingParams = sourceProperties
-                                                .Where(p => propertyName == null || p.Name.ToLower() == propertyName.ToLower().Trim()
-                                                    && (p.PropertyType == typeof(DateTime)
-                                                        || p.PropertyType.IsGenericType
-                                                        && p.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>)
-                                                        && p.PropertyType.GetGenericArguments()[0] == typeof(DateTime)))
+                                                .Where(p => propertyName == null ||
+                                                            p.Name.ToLower() == propertyName.ToLower().Trim()
+                                                            && (p.PropertyType == typeof(DateTime)
+                                                                || p.PropertyType.IsGenericType
+                                                                && p.PropertyType.GetGenericTypeDefinition() ==
+                                                                typeof(Nullable<>)
+                                                                && p.PropertyType.GetGenericArguments()[0] ==
+                                                                typeof(DateTime)))
                                                 .Any();
 
                                             if (isExistingParams)
@@ -58,13 +63,14 @@ namespace LAK.Sdk.Core.Utilities
                                                         endDate.Day, 23, 59, 59);
                                                 // Apply date range filter
                                                 source = source.WhereDynamic(propertyName, ">=", startDate.ToString(),
-                                                    "&&", ToExpression<T>(null, propertyName, "<=", endDate.ToString()));
+                                                    "&&",
+                                                    ToExpression<T>(null, propertyName, "<=", endDate.ToString()));
                                             }
                                         }
                                     }
                                 }
                             }
-                            
+
                             if (sourceProperty == null) break;
                             source = source.WhereDynamic(propertyInfo.Name, "LIKE", propValue.ToString());
                             break;
@@ -276,6 +282,62 @@ namespace LAK.Sdk.Core.Utilities
             if (page < 1)
                 page = 1;
             return (source.Count<TResult>(), source.Skip<TResult>((page - 1) * size).Take<TResult>(size));
+        }
+
+        public static IQueryable<T> FullTextSearch<T>(
+            this IQueryable<T> source,
+            string searchTerm)
+        {
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                Type entityType = typeof(T);
+                PropertyInfo[] properties = entityType.GetProperties();
+
+                // Create a parameter expression
+                var parameter = Expression.Parameter(entityType, "x");
+
+                // Create an expression to represent the combined OR condition
+                Expression combinedCondition = null;
+
+                foreach (var propertyInfo in properties)
+                {
+                    var propType = Nullable.GetUnderlyingType(propertyInfo.PropertyType) ?? propertyInfo.PropertyType;
+
+                    // Check if the property type is searchable (int, Guid, DateTime, or string)
+                    if (propType == typeof(int) || propType == typeof(decimal) || propType == typeof(double) ||
+                        propType == typeof(Guid) || propType == typeof(DateTime) || propType == typeof(string))
+                    {
+                        Expression propertyExpression = Expression.Property(parameter, propertyInfo);
+
+                        // Convert non-string properties to string for search
+                        if (propType != typeof(string))
+                        {
+                            var toStringMethod = typeof(object).GetMethod("ToString");
+                            propertyExpression = Expression.Call(propertyExpression, toStringMethod);
+                        }
+
+                        // Create an expression to represent x.PropertyName.ToString().Contains(searchTerm)
+                        var containsExpression = Expression.Call(propertyExpression, "Contains", null,
+                            Expression.Constant(searchTerm));
+
+                        var condition = Expression.Lambda<Func<T, bool>>(containsExpression, parameter);
+
+                        // Combine conditions with OR
+                        combinedCondition = combinedCondition == null
+                            ? (Expression)condition.Body
+                            : Expression.OrElse(combinedCondition, condition.Body);
+                    }
+                }
+
+                // If there are any searchable properties, apply the combined condition to the source
+                if (combinedCondition != null)
+                {
+                    var lambda = Expression.Lambda<Func<T, bool>>(combinedCondition, parameter);
+                    source = source.Where(lambda);
+                }
+            }
+
+            return source;
         }
 
         private static Expression<Func<T, object>> GetPropertyGetter<T>(string property)
